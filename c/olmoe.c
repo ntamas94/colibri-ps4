@@ -3348,6 +3348,9 @@ int main(int argc, char **argv) {
     coli_omp_hot_team(argv, "olmoe", coli_omp_env_on("COLI_CUDA") || coli_omp_env_on("COLI_METAL"));   /* omp_tune.h */
     coli_omp_tune_threads("olmoe");   /* squadra sui core fisici: vedi omp_tune.h */
     const char *snap = getenv("SNAP");
+#ifdef COLI_PS4_API
+    if (!snap) snap = "/data/colibri-ps4/model";
+#endif
     if (!snap) { coli_print_launcher_help("OLMoE", "SNAP=<model directory> ./olmoe ..."); return 1; }
     g_pilot = getenv("PILOT") ? atoi(getenv("PILOT")) : 0;
     g_wide  = getenv("WIDE")  ? atoi(getenv("WIDE"))  : 1;
@@ -3371,8 +3374,11 @@ int main(int argc, char **argv) {
      * handshake, SUBMIT/CANCEL, DATA/DONE/PROF frames, HWINFO/TIERS/EMAP for
      * the dashboard) — same protocol as colibri.c/inkling.c/kimi_k3.c. v1:
      * one request at a time, full re-prefill every turn (see serve_one()). */
-    if ((getenv("SERVE") && getenv("SERVE")[0] == '1') ||
-        (getenv("PS4_API") && getenv("PS4_API")[0] == '1')) {
+    if ((getenv("SERVE") && getenv("SERVE")[0] == '1')
+#ifdef COLI_PS4_API
+        || ps4_api_requested()
+#endif
+       ) {
         const char *ks = getenv("KV_SLOTS");   /* the conversations decoded at once */
         if (ks && *ks) {
             char *end = NULL; long v = strtol(ks, &end, 10);
@@ -3424,7 +3430,7 @@ int main(int argc, char **argv) {
         tok_load(&T, tokpath);
         coli_rt_term_arm();   /* SIGTERM must reach the save below (#1629) */
 #ifdef COLI_PS4_API
-        if (getenv("PS4_API") && getenv("PS4_API")[0] == '1') {
+        if (ps4_api_requested()) {
             coli_serve_stdio_init();
             int tok_eos = tok_id_of(&T, "|||IP_ADDRESS|||");
             stops_arm_tok(&m.c, tok_eos, &T);

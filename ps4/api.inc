@@ -20,6 +20,11 @@ _Static_assert(sizeof(Ps4SockaddrIn) == sizeof(OrbisNetSockaddr), "sockaddr size
 
 typedef struct { char *p; size_t n, cap; } Ps4Buf;
 
+static int ps4_api_requested(void) {
+    const char *value = getenv("PS4_API");
+    return !value || strcmp(value, "0") != 0;
+}
+
 static int ps4_buf_add(Ps4Buf *b, const char *s, size_t n) {
     if (n > SIZE_MAX - b->n - 1) return 0;
     size_t need = b->n + n + 1;

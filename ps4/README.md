@@ -32,3 +32,7 @@ The output is `build/ps4/colibri.elf`.
 - PS4 package, app lifecycle, filesystem behavior, and model inference: not yet
   implemented or verified on console.
 - GPU inference: not implemented. The first runtime milestone is CPU-only.
+- The existing OpenAI API is a Python gateway that starts the engine as a child
+  process; it cannot be reused directly in a PS4 ELF. A native API needs to call
+  Colibri inference in-process. Garlic LLM is a reference for the PS4 network
+  server, not a drop-in API implementation.

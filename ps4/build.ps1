@@ -19,14 +19,14 @@ foreach ($path in @($zig, (Join-Path $oo "include"), (Join-Path $oo "link.x"), (
 }
 
 New-Item -ItemType Directory -Force -Path $build | Out-Null
-$object = Join-Path $build "colibri.o"
-$elf = Join-Path $build "colibri.elf"
+$object = Join-Path $build "olmoe.o"
+$elf = Join-Path $build "olmoe.elf"
 
 $compile = @(
     "cc", "-target", "x86_64-freebsd-none", "-march=btver2", "-fshort-wchar",
-    "-O2", "-fPIC", "-funwind-tables", "-fno-stack-protector", "-nostdinc",
+    "-O2", "-fPIC", "-funwind-tables", "-fno-stack-protector", "-nostdinc", "-DCOLI_PS4_API",
     "-isystem", (Join-Path $oo "include"), "-I", (Join-Path $root "c"),
-    "-c", (Join-Path $root "c\colibri.c"), "-o", $object
+    "-c", (Join-Path $root "c\olmoe.c"), "-o", $object
 )
 & $zig @compile
 if ($LASTEXITCODE -ne 0) { throw "PS4 compile failed with exit code $LASTEXITCODE" }
@@ -34,9 +34,9 @@ if ($LASTEXITCODE -ne 0) { throw "PS4 compile failed with exit code $LASTEXITCOD
 $link = @(
     "ld.lld", "-m", "elf_x86_64", "-pie", "--script", (Join-Path $oo "link.x"),
     "--eh-frame-hdr", $object, "-L", (Join-Path $oo "lib"), "-lc", "-lm",
-    "-lpthread", "-lkernel", "-lSceNet", (Join-Path $oo "lib\crt1.o"), "-o", $elf
+    "-lpthread", "-lkernel", "-lSceSysmodule", "-lSceNet", (Join-Path $oo "lib\crt1.o"), "-o", $elf
 )
 & $zig @link
 if ($LASTEXITCODE -ne 0) { throw "PS4 link failed with exit code $LASTEXITCODE" }
 
-Write-Output "Built PS4 ELF: $elf"
+Write-Output "Built PS4 OLMoE ELF: $elf"

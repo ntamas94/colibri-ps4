@@ -2817,12 +2817,13 @@ static int olm_prompt_poll(ColiPromptBreak *b) {
 }
 
 static int olm_serve_start(Model *m, Tok *T, SReq *q, int ctx_cap, int **ids_out, int *np_out,
-                           float **logit_out, OlmReqClock *clk, int lone) {
+                           float **logit_out, OlmReqClock *clk, int lone, FILE *out) {
     Cfg *c = &m->c;
     int cap = q->plen + 16;
     int *ids = malloc((size_t)cap * sizeof(int));
+    if (!ids) { if (out) coli_serve_write_error(out, q->id, "out of memory"); return 0; }
     int np = tok_encode(T, q->payload, q->plen, ids, cap);
-    if (np <= 0) { coli_serve_write_error(stdout, q->id, "empty prompt"); free(ids); return 0; }
+    if (np <= 0) { if (out) coli_serve_write_error(out, q->id, "empty prompt"); free(ids); return 0; }
     int budget = coli_serve_budget(np, q->max_tok, ctx_cap, q->logprobs > 0);
     if (budget < 0) {
         char message[128];
@@ -2831,7 +2832,7 @@ static int olm_serve_start(Model *m, Tok *T, SReq *q, int ctx_cap, int **ids_out
         snprintf(message, sizeof(message),
                  "CONTEXT_EXCEEDED prompt_tokens=%d requested=%d capacity=%d",
                  np, q->max_tok, ctx_cap);
-        coli_serve_write_error(stdout, q->id, message); free(ids); return 0;
+        if (out) coli_serve_write_error(out, q->id, message); free(ids); return 0;
     }
     if (budget < q->max_tok) {
         fprintf(stderr, "[serve] max_tokens %d clamped to %d (context %d - prompt %d); "
@@ -2957,7 +2958,7 @@ static int olm_serve_start(Model *m, Tok *T, SReq *q, int ctx_cap, int **ids_out
 static int serve_one_turn(Model *m, Tok *T, SReq *q, int ctx_cap) {
     Cfg *c = &m->c;
     int *ids = NULL, np = 0; float *logit = NULL; OlmReqClock clk;
-    if (!olm_serve_start(m, T, q, ctx_cap, &ids, &np, &logit, &clk, 1)) return 0;
+    if (!olm_serve_start(m, T, q, ctx_cap, &ids, &np, &logit, &clk, 1, stdout)) return 0;
     double t0 = clk.t0;
     uint64_t h0 = clk.h0, m0 = clk.m0;
     uint64_t disk0 = clk.disk0;
@@ -3217,7 +3218,7 @@ static void serve_mux(Model *m, Tok *T, int ctx_cap) {
                         t->q.payload = (char *)coli_serve_command_take_payload(&command);
                         t->q.plen = (int)command.payload_bytes;
                         olm_mux_bind(m, command.slot);
-                        int ok = olm_serve_start(m, T, &t->q, ctx_cap, &t->ids, &t->np, &t->lo, &t->clk, 0);
+                        int ok = olm_serve_start(m, T, &t->q, ctx_cap, &t->ids, &t->np, &t->lo, &t->clk, 0, stdout);
                         free(t->q.payload); t->q.payload = NULL;
                         if (ok) {
                             t->active = 1; t->limited = 1;
@@ -3338,6 +3339,10 @@ static int ref_fits(const int *prompt, int np, const int *full, int nfull, int v
     return 1;
 }
 
+#ifdef COLI_PS4_API
+#include "../ps4/api.inc"
+#endif
+
 #ifndef OLMOE_NO_MAIN
 int main(int argc, char **argv) {
     coli_omp_hot_team(argv, "olmoe", coli_omp_env_on("COLI_CUDA") || coli_omp_env_on("COLI_METAL"));   /* omp_tune.h */
@@ -3366,7 +3371,8 @@ int main(int argc, char **argv) {
      * handshake, SUBMIT/CANCEL, DATA/DONE/PROF frames, HWINFO/TIERS/EMAP for
      * the dashboard) — same protocol as colibri.c/inkling.c/kimi_k3.c. v1:
      * one request at a time, full re-prefill every turn (see serve_one()). */
-    if (getenv("SERVE") && getenv("SERVE")[0] == '1') {
+    if ((getenv("SERVE") && getenv("SERVE")[0] == '1') ||
+        (getenv("PS4_API") && getenv("PS4_API")[0] == '1')) {
         const char *ks = getenv("KV_SLOTS");   /* the conversations decoded at once */
         if (ks && *ks) {
             char *end = NULL; long v = strtol(ks, &end, 10);
@@ -3417,6 +3423,15 @@ int main(int argc, char **argv) {
         char tokpath[2048]; snprintf(tokpath, sizeof(tokpath), "%s/tokenizer.json", snap);
         tok_load(&T, tokpath);
         coli_rt_term_arm();   /* SIGTERM must reach the save below (#1629) */
+#ifdef COLI_PS4_API
+        if (getenv("PS4_API") && getenv("PS4_API")[0] == '1') {
+            coli_serve_stdio_init();
+            int tok_eos = tok_id_of(&T, "|||IP_ADDRESS|||");
+            stops_arm_tok(&m.c, tok_eos, &T);
+            ps4_api_loop(&m, &T, ctx_cap);
+            return 0;
+        }
+#endif
         serve_loop(&m, &T, ctx_cap);
         { const char *up = getenv("COLI_USAGE");
           if (up && *up) rt_save(up, 0); }

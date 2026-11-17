@@ -11,6 +11,7 @@ STAGE = OUT / "pkg"
 TITLE = "Colibri PS4 API"
 TITLE_ID = "COLB00001"
 CONTENT_ID = "IV0000-COLB00001_00-COLIBRIAPI000001"
+VERSION = "1.01"
 OO_REL = Path("OpenOrbis") / "PS4Toolchain"
 
 
@@ -71,11 +72,11 @@ def main():
     pkgtool = [dotnet, bin_dir / "PkgTool.Core.dll"]
     run([*pkgtool, "sfo_new", sfo], cwd=stage, env=build_env)
     entries = [
-        ("APP_TYPE", "Integer", 4, "1"), ("APP_VER", "Utf8", 8, "1.00"),
+        ("APP_TYPE", "Integer", 4, "1"), ("APP_VER", "Utf8", 8, VERSION),
         ("ATTRIBUTE", "Integer", 4, "0"), ("CATEGORY", "Utf8", 4, "gd"),
         ("CONTENT_ID", "Utf8", 48, CONTENT_ID), ("DOWNLOAD_DATA_SIZE", "Integer", 4, "0"),
         ("SYSTEM_VER", "Integer", 4, "0"), ("TITLE", "Utf8", 128, TITLE),
-        ("TITLE_ID", "Utf8", 12, TITLE_ID), ("VERSION", "Utf8", 8, "1.00"),
+        ("TITLE_ID", "Utf8", 12, TITLE_ID), ("VERSION", "Utf8", 8, VERSION),
     ]
     for key, typ, size, value in entries:
         run([*pkgtool, "sfo_setentry", sfo, key, "--type", typ, "--maxsize", str(size), "--value", value],

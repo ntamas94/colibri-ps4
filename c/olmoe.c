@@ -3345,6 +3345,10 @@ static int ref_fits(const int *prompt, int np, const int *full, int nfull, int v
 
 #ifndef OLMOE_NO_MAIN
 int main(int argc, char **argv) {
+#ifdef COLI_PS4_API
+    ps4_api_log_start();
+    fprintf(stderr, "[PS4] entered OLMoE main\n");
+#endif
     coli_omp_hot_team(argv, "olmoe", coli_omp_env_on("COLI_CUDA") || coli_omp_env_on("COLI_METAL"));   /* omp_tune.h */
     coli_omp_tune_threads("olmoe");   /* squadra sui core fisici: vedi omp_tune.h */
     const char *snap = getenv("SNAP");
@@ -3363,7 +3367,11 @@ int main(int argc, char **argv) {
     if (g_wide < 1) g_wide = 1;
     if (g_wide > 4) g_wide = 4;
     int hot_n  = getenv("HOT")   ? atoi(getenv("HOT"))   : 0;
-    int cap    = argc > 1 ? coli_arg_int(argv[1], "cache/layer") : 16;
+    int cap_default = 16;
+#ifdef COLI_PS4_API
+    cap_default = 4;
+#endif
+    int cap    = argc > 1 ? coli_arg_int(argv[1], "cache/layer") : cap_default;
     int bits   = argc > 2 ? coli_arg_int(argv[2], "expert bits") : 8;
     if (bits < 2 || bits > 8) {
         fprintf(stderr, "quant_bits must be 2..8 (got %d)\n", bits);
@@ -3385,7 +3393,11 @@ int main(int argc, char **argv) {
             if (end == ks || *end || v < 1 || v > 16) { fprintf(stderr, "KV_SLOTS must be between 1 and 16\n"); return 2; }
             g_olm_mux_slots = (int)v;
         }
-        int ctx_cap = getenv("CTX") ? atoi(getenv("CTX")) : 4096;
+        int ctx_default = 4096;
+#ifdef COLI_PS4_API
+        ctx_default = 1024;
+#endif
+        int ctx_cap = getenv("CTX") ? atoi(getenv("CTX")) : ctx_default;
         if (ctx_cap < 1 || ctx_cap > 4096) {   /* attention()'s sc[4096] score buffer hard-caps this */
             fprintf(stderr, "CTX must be 1..4096 (got %d)\n", ctx_cap);
             return 1;
@@ -3396,7 +3408,11 @@ int main(int argc, char **argv) {
      * it -- ASan: stack-use-after-return, READ of size 8, in a worker thread,
      * with the run's tokens already correct (#1262). Static storage outlives
      * every thread, so the pointer the worker holds stays valid. */
+        fprintf(stderr, "[PS4] loading OLMoE model from %s (cache=%d, ctx=%d)\n", snap, cap, ctx_cap);
         static Model m; model_init(&m, snap, cap, bits);
+#ifdef COLI_PS4_API
+        fprintf(stderr, "[PS4] model loaded; allocating KV cache\n");
+#endif
         m.max_t = ctx_cap;
         m.K = calloc(m.c.n_layers, sizeof(float*)); m.V = calloc(m.c.n_layers, sizeof(float*));
         for (int i = 0; i < m.c.n_layers; i++) {
@@ -3428,6 +3444,9 @@ int main(int argc, char **argv) {
         Tok T;
         char tokpath[2048]; snprintf(tokpath, sizeof(tokpath), "%s/tokenizer.json", snap);
         tok_load(&T, tokpath);
+#ifdef COLI_PS4_API
+        fprintf(stderr, "[PS4] tokenizer loaded; starting API\n");
+#endif
         coli_rt_term_arm();   /* SIGTERM must reach the save below (#1629) */
 #ifdef COLI_PS4_API
         if (ps4_api_requested()) {

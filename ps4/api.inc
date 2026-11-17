@@ -25,6 +25,17 @@ static int ps4_api_requested(void) {
     return !value || strcmp(value, "0") != 0;
 }
 
+static void ps4_api_log_start(void) {
+    FILE *log = fopen("/data/colibri-ps4/boot.log", "ab");
+    if (!log) return;
+    int fd = fileno(log);
+    if (dup2(fd, 1) >= 0 && dup2(fd, 2) >= 0) {
+        if (fd > 2) close(fd);
+        setvbuf(stdout, NULL, _IONBF, 0);
+        setvbuf(stderr, NULL, _IONBF, 0);
+    } else fclose(log);
+}
+
 static int ps4_buf_add(Ps4Buf *b, const char *s, size_t n) {
     if (n > SIZE_MAX - b->n - 1) return 0;
     size_t need = b->n + n + 1;
